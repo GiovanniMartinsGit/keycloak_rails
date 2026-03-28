@@ -1,0 +1,14 @@
+# frozen_string_literal: true
+
+class AddKeycloakFieldsTo<%= class_name.pluralize %> < ActiveRecord::Migration[<%= ActiveRecord::Migration.current_version %>]
+  def change
+    unless column_exists?(:<%= table_name %>, :keycloak_id)
+      add_column :<%= table_name %>, :keycloak_id, :string
+      add_index :<%= table_name %>, :keycloak_id, unique: true
+    end
+
+    unless index_exists?(:<%= table_name %>, :email, unique: true)
+      add_index :<%= table_name %>, :email, unique: true
+    end
+  end
+end

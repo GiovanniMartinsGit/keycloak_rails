@@ -1,0 +1,42 @@
+# frozen_string_literal: true
+
+KeycloakRails.configure do |config|
+  # URL do servidor Keycloak
+  config.server_url = ENV.fetch("KEYCLOAK_SERVER_URL", "http://localhost:8080")
+
+  # Nome do Realm
+  config.realm = ENV.fetch("KEYCLOAK_REALM", "master")
+
+  # Client ID (nome da aplicação no Keycloak)
+  config.client_id = ENV.fetch("KEYCLOAK_CLIENT_ID", "sua_aplicacao")
+
+  # Client Secret
+  config.client_secret = ENV.fetch("KEYCLOAK_CLIENT_SECRET", "seu_secret")
+
+  # Nome da classe do modelo de usuário
+  config.resource_model_class_name = "User"
+
+  # Nome da permissão exigida no client do Keycloak
+  # Exemplo: "access_transparencia"
+  # Deixe nil para não exigir permissão específica
+  config.permission_name = nil
+
+  # Caminhos que não exigem autenticação (regex)
+  config.skip_paths = [
+    %r{\A/keycloak},
+    %r{\A/assets},
+    %r{\A/favicon}
+  ]
+
+  # Tolerância em segundos para expiração do token
+  config.token_expiration_tolerance = 10
+
+  # Caminho após login
+  config.after_sign_in_path = "/"
+
+  # Caminho após logout
+  config.after_sign_out_path = "/"
+
+  # Criar usuário automaticamente no primeiro login?
+  config.create_user_on_first_login = false
+end
