@@ -147,7 +147,7 @@ module KeycloakRails
 
     def handle_permission_error(error)
       flash[:alert] = "Você não possui permissão para acessar esta aplicação."
-      redirect_to main_app.root_path
+      redirect_to resolve_permission_denied_path, status: keycloak_config.permission_denied_status
     end
 
     def handle_user_not_found_error(error)
@@ -173,6 +173,22 @@ module KeycloakRails
 
     def keycloak_config
       KeycloakRails.configuration
+    end
+
+    def resolve_permission_denied_path
+      configured_path = keycloak_config.permission_denied_path
+
+      case configured_path
+      when Proc
+        instance_exec(&configured_path)
+      when Symbol
+        return main_app.public_send(configured_path) if main_app.respond_to?(configured_path)
+        return public_send(configured_path) if respond_to?(configured_path, true)
+
+        raise ConfigurationError, "Rota configurada em permission_denied_path não existe: #{configured_path}"
+      else
+        configured_path
+      end
     end
   end
 end

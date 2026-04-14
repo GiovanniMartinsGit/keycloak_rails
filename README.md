@@ -111,6 +111,14 @@ KeycloakRails.configure do |config|
   config.after_sign_in_path = "/"
   config.after_sign_out_path = "/"
 
+  # Retorno quando o usuário autentica, mas não tem a role exigida
+  # Aceita String, Symbol (helper de rota) ou Proc
+  # Ex.: "/assinatura", :billing_path, -> { main_app.billing_path }
+  config.permission_denied_path = "/assinatura"
+
+  # HTTP status do retorno por falta de permissão (padrão: 402)
+  config.permission_denied_status = :payment_required
+
   # SSL (padrão: true). Não pode ser false em produção.
   config.ssl_verify = true
   # config.ca_file = "/caminho/para/ca-bundle.crt"  # Opcional
@@ -316,4 +324,3 @@ Em deploy com `WEB_CONCURRENCY > 1` (múltiplos workers Puma), cada worker tem s
 - A **renovação automática de tokens expirados** pode não funcionar cross-worker
 
 Para ambientes com múltiplos workers que precisam de renovação automática, considere usar Puma com `preload_app!` ou migrar o token store para um backend compartilhado (Redis, Memcached).
-

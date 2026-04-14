@@ -37,6 +37,14 @@ KeycloakRails.configure do |config|
   # Caminho após logout
   config.after_sign_out_path = "/"
 
+  # Rota para retorno quando faltar permissão no callback
+  # Pode ser String ("/plano"), Symbol (:billing_path) ou Proc (-> { main_app.billing_path })
+  config.permission_denied_path = "/"
+
+  # Status HTTP para retorno de falta de permissão
+  # Padrão: :payment_required (402)
+  config.permission_denied_status = :payment_required
+
   # Criar usuário automaticamente no primeiro login?
   config.create_user_on_first_login = false
 end
