@@ -3,6 +3,8 @@
 require "spec_helper"
 
 RSpec.describe KeycloakRails::Controllers::Concerns::Authentication do
+  let(:keycloak_rails_routes) { double("keycloak_rails_routes", login_path: "/keycloak/login", logout_path: "/keycloak/logout") }
+
   let(:controller_class) do
     Class.new do
       include KeycloakRails::Controllers::Concerns::Authentication
@@ -11,7 +13,7 @@ RSpec.describe KeycloakRails::Controllers::Concerns::Authentication do
 
       def initialize
         @session = {}
-        @request = OpenStruct.new(fullpath: "/current-page", get?: true)
+        @request = OpenStruct.new(fullpath: "/current-page", path: "/current-page", get?: true)
       end
 
       def redirect_to(*args); end
@@ -24,7 +26,11 @@ RSpec.describe KeycloakRails::Controllers::Concerns::Authentication do
     end
   end
 
-  let(:controller) { controller_class.new }
+  let(:controller) do
+    c = controller_class.new
+    allow(c).to receive(:keycloak_rails).and_return(keycloak_rails_routes)
+    c
+  end
 
   describe "#keycloak_current_user" do
     it "retorna nil quando não há sessão" do
@@ -76,6 +82,25 @@ RSpec.describe KeycloakRails::Controllers::Concerns::Authentication do
     end
   end
 
+  describe "#keycloak_session_active?" do
+    it "retorna false quando não há sessão nem flag de autenticação" do
+      expect(controller.keycloak_session_active?).to be false
+    end
+
+    it "retorna true quando há usuário logado na aplicação" do
+      user = User.create!(email: "user@teste.com")
+      controller.session[:_keycloak_user_id] = user.id
+
+      expect(controller.keycloak_session_active?).to be true
+    end
+
+    it "retorna true quando há flag de autenticação Keycloak (sem permissão na app)" do
+      controller.session[:_keycloak_authenticated] = true
+
+      expect(controller.keycloak_session_active?).to be true
+    end
+  end
+
   describe "#authenticate_keycloak_user!" do
     it "não redireciona se usuário está autenticado" do
       user = User.create!(email: "user@teste.com")
@@ -94,6 +119,13 @@ RSpec.describe KeycloakRails::Controllers::Concerns::Authentication do
       allow(controller).to receive(:redirect_to)
       controller.authenticate_keycloak_user!
       expect(controller.session[:keycloak_rails_return_to]).to eq("/current-page")
+    end
+
+    it "não redireciona se a requisição é para a rota de logout" do
+      controller.request = OpenStruct.new(fullpath: "/keycloak/logout", path: "/keycloak/logout", get?: false)
+
+      expect(controller).not_to receive(:redirect_to)
+      controller.authenticate_keycloak_user!
     end
   end
 end

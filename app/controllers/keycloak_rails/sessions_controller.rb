@@ -37,6 +37,7 @@ module KeycloakRails
       handle_authentication_error(e)
     rescue PermissionDeniedError => e
       log_error("Permissão negada: #{e.message}")
+      session[:_keycloak_authenticated] = true
       handle_permission_error(e)
     rescue UserNotFoundError => e
       log_error("Usuário não encontrado: #{e.message}")
@@ -53,6 +54,7 @@ module KeycloakRails
       end
 
       session.delete(:_keycloak_user_id)
+      session.delete(:_keycloak_authenticated)
       session.delete(:keycloak_oauth_state)
       session.delete(:keycloak_rails_return_to)
 

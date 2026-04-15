@@ -9,7 +9,7 @@ module KeycloakRails
         extend ActiveSupport::Concern
 
         included do
-          helper_method :current_user, :keycloak_current_user, :keycloak_user_signed_in? if respond_to?(:helper_method)
+          helper_method :current_user, :keycloak_current_user, :keycloak_user_signed_in?, :keycloak_session_active? if respond_to?(:helper_method)
         end
 
         def keycloak_current_user
@@ -25,6 +25,10 @@ module KeycloakRails
 
         def keycloak_user_signed_in?
           keycloak_current_user.present?
+        end
+
+        def keycloak_session_active?
+          keycloak_user_signed_in? || session[:_keycloak_authenticated] == true
         end
 
         def authenticate_keycloak_user!
@@ -51,6 +55,7 @@ module KeycloakRails
           end
 
           session.delete(:_keycloak_user_id)
+          session.delete(:_keycloak_authenticated)
           @_keycloak_current_user = nil
 
           redirect_to keycloak_config.after_sign_out_path
