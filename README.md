@@ -113,11 +113,11 @@ KeycloakRails.configure do |config|
 
   # Retorno quando o usuário autentica, mas não tem a role exigida
   # Aceita String, Symbol (helper de rota) ou Proc
-  # Ex.: "/assinatura", :billing_path, -> { main_app.billing_path }
-  config.permission_denied_path = "/assinatura"
+  # Ex.: "/401", :permission_denied_path, ->(env) { "/custom_path" }
+  config.permission_denied_path = "/401"
 
-  # HTTP status do retorno por falta de permissão (padrão: 402)
-  config.permission_denied_status = :payment_required
+  # HTTP status do retorno por falta de permissão de acesso(padrão: 401)
+  config.permission_denied_status = :unauthorized
 
   # SSL (padrão: true). Não pode ser false em produção.
   config.ssl_verify = true

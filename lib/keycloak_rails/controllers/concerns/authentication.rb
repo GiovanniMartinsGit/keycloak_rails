@@ -29,6 +29,7 @@ module KeycloakRails
 
         def authenticate_keycloak_user!
           return if keycloak_user_signed_in?
+          return if keycloak_logout_request?
 
           store_location!
           redirect_to keycloak_rails.login_path, allow_other_host: false
@@ -56,6 +57,12 @@ module KeycloakRails
         end
 
         private
+
+        def keycloak_logout_request?
+          request.path == keycloak_rails.logout_path
+        rescue NoMethodError
+          false
+        end
 
         def store_location!
           path = request.fullpath
