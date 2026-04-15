@@ -13,6 +13,7 @@ RSpec.describe KeycloakRails::Configuration do
       expect(config.token_expiration_tolerance).to eq(10)
       expect(config.after_sign_in_path).to eq("/")
       expect(config.after_sign_out_path).to eq("/")
+      expect(config.permission_denied_path).to eq("/")
       expect(config.create_user_on_first_login).to be false
       expect(config.skip_paths).to eq([])
     end

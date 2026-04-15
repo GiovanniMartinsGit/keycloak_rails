@@ -16,10 +16,10 @@ KeycloakRails.configure do |config|
   # Nome da classe do modelo de usuário
   config.resource_model_class_name = "User"
 
-  # Nome da permissão exigida no client do Keycloak
-  # Exemplo: "access_transparencia"
+  # Nome da client role exigida no client do Keycloak
+  # A gem verifica se o access token contém essa role em resource_access.<client_id>.roles
   # Deixe nil para não exigir permissão específica
-  config.permission_name = nil
+  config.permission_name = ENV.fetch("KEYCLOAK_PERMISSION_NAME", "access_role")
 
   # Caminhos que não exigem autenticação (regex)
   config.skip_paths = [
@@ -40,10 +40,6 @@ KeycloakRails.configure do |config|
   # Rota para retorno quando faltar permissão no callback
   # Pode ser String ("/plano"), Symbol (:billing_path) ou Proc (-> { main_app.billing_path })
   config.permission_denied_path = "/"
-
-  # Status HTTP para retorno de falta de permissão
-  # Padrão: :payment_required (402)
-  config.permission_denied_status = :payment_required
 
   # Criar usuário automaticamente no primeiro login?
   config.create_user_on_first_login = false

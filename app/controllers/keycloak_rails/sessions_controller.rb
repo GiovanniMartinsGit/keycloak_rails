@@ -147,7 +147,7 @@ module KeycloakRails
 
     def handle_permission_error(error)
       flash[:alert] = "Você não possui permissão para acessar esta aplicação."
-      redirect_to resolve_permission_denied_path, status: keycloak_config.permission_denied_status
+      redirect_to resolve_permission_denied_path
     end
 
     def handle_user_not_found_error(error)

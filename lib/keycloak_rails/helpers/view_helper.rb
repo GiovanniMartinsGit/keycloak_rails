@@ -4,7 +4,7 @@ module KeycloakRails
   module Helpers
     module ViewHelper
       def keycloak_user_signed_in?
-        current_user.present?
+        keycloak_current_user.present?
       end
 
       def keycloak_login_path

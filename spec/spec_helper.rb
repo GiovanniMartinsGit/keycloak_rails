@@ -53,6 +53,7 @@ RSpec.configure do |config|
       c.client_id = "test-client"
       c.client_secret = "test-secret"
       c.resource_model_class_name = "User"
+      c.permission_name = nil
       c.logger = Logger.new(File::NULL)
     end
   end

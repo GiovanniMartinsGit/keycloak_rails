@@ -26,31 +26,40 @@ RSpec.describe KeycloakRails::Controllers::Concerns::Authentication do
 
   let(:controller) { controller_class.new }
 
-  describe "#current_user" do
+  describe "#keycloak_current_user" do
     it "retorna nil quando não há sessão" do
-      expect(controller.current_user).to be_nil
+      expect(controller.keycloak_current_user).to be_nil
     end
 
     it "retorna o usuário da sessão" do
       user = User.create!(email: "user@teste.com")
       controller.session[:_keycloak_user_id] = user.id
 
-      expect(controller.current_user).to eq(user)
+      expect(controller.keycloak_current_user).to eq(user)
     end
 
     it "retorna nil quando usuário não existe mais" do
       controller.session[:_keycloak_user_id] = 99999
 
-      expect(controller.current_user).to be_nil
+      expect(controller.keycloak_current_user).to be_nil
     end
 
     it "memoiza o resultado" do
       user = User.create!(email: "user@teste.com")
       controller.session[:_keycloak_user_id] = user.id
 
-      controller.current_user
+      controller.keycloak_current_user
       expect(User).not_to receive(:find_by)
-      controller.current_user
+      controller.keycloak_current_user
+    end
+  end
+
+  describe "#current_user" do
+    it "delega para keycloak_current_user" do
+      user = User.create!(email: "user@teste.com")
+      controller.session[:_keycloak_user_id] = user.id
+
+      expect(controller.current_user).to eq(controller.keycloak_current_user)
     end
   end
 

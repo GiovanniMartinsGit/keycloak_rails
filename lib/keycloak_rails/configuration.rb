@@ -8,7 +8,7 @@ module KeycloakRails
                   :token_expiration_tolerance, :logger,
                   :after_sign_in_path, :after_sign_out_path,
                   :create_user_on_first_login,
-                  :permission_denied_path, :permission_denied_status,
+                  :permission_denied_path,
                   :ssl_verify, :ca_file
 
     def initialize
@@ -25,7 +25,6 @@ module KeycloakRails
       @after_sign_out_path = "/"
       @create_user_on_first_login = false
       @permission_denied_path = "/"
-      @permission_denied_status = :payment_required
       @ssl_verify = true
       @ca_file = nil
     end

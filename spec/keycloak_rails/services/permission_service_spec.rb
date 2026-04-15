@@ -5,58 +5,131 @@ require "spec_helper"
 RSpec.describe KeycloakRails::Services::PermissionService do
   subject(:service) { described_class.new }
 
+  let(:token_service) { instance_double(KeycloakRails::Services::TokenService) }
+
+  before do
+    allow(KeycloakRails::Services::TokenService).to receive(:new).and_return(token_service)
+  end
+
   describe "#user_has_permission?" do
-    context "quando permissão é concedida" do
+    context "quando o token contém a client role exigida" do
       it "retorna true" do
-        stub_request(:post, "#{keycloak_base_url}/token")
-          .with(body: hash_including(
-            "grant_type" => "urn:ietf:params:oauth:grant-type:uma-ticket",
-            "audience" => "test-client",
-            "permission" => "access_transparencia",
-            "response_mode" => "decision"
-          ))
-          .to_return(status: 200, body: { "result" => true }.to_json, headers: { "Content-Type" => "application/json" })
+        decoded_token = {
+          "resource_access" => {
+            "test-client" => { "roles" => ["access_role", "admin"] }
+          }
+        }
+        allow(token_service).to receive(:decode_token).and_return(decoded_token)
 
-        expect(service.user_has_permission?("test-token", "access_transparencia")).to be true
-      end
-    end
+        KeycloakRails.configuration.permission_name = "access_role"
 
-    context "quando permissão é negada" do
-      it "retorna false" do
-        stub_request(:post, "#{keycloak_base_url}/token")
-          .to_return(status: 403, body: { "error" => "access_denied" }.to_json, headers: { "Content-Type" => "application/json" })
-
-        expect(service.user_has_permission?("test-token", "access_transparencia")).to be false
-      end
-    end
-
-    context "quando token é inválido" do
-      it "retorna false" do
-        stub_request(:post, "#{keycloak_base_url}/token")
-          .to_return(status: 401, body: "Unauthorized")
-
-        expect(service.user_has_permission?("invalid-token", "access_transparencia")).to be false
-      end
-    end
-
-    context "quando permission_name é nil" do
-      it "retorna true sem chamar o Keycloak" do
-        KeycloakRails.configuration.permission_name = nil
         expect(service.user_has_permission?("test-token")).to be true
       end
     end
 
-    context "quando usa permission_name da configuração" do
-      it "usa o valor configurado" do
-        KeycloakRails.configuration.permission_name = "access_sistema"
+    context "quando o token NÃO contém a client role exigida" do
+      it "retorna false" do
+        decoded_token = {
+          "resource_access" => {
+            "test-client" => { "roles" => ["other_role"] }
+          }
+        }
+        allow(token_service).to receive(:decode_token).and_return(decoded_token)
 
-        stub = stub_request(:post, "#{keycloak_base_url}/token")
-          .with(body: hash_including("permission" => "access_sistema"))
-          .to_return(status: 200, body: { "result" => true }.to_json, headers: { "Content-Type" => "application/json" })
+        KeycloakRails.configuration.permission_name = "access_role"
 
-        service.user_has_permission?("test-token")
-        expect(stub).to have_been_requested
+        expect(service.user_has_permission?("test-token")).to be false
       end
+    end
+
+    context "quando o token não possui resource_access para o client" do
+      it "retorna false" do
+        decoded_token = {
+          "resource_access" => {
+            "outro-client" => { "roles" => ["access_role"] }
+          }
+        }
+        allow(token_service).to receive(:decode_token).and_return(decoded_token)
+
+        KeycloakRails.configuration.permission_name = "access_role"
+
+        expect(service.user_has_permission?("test-token")).to be false
+      end
+    end
+
+    context "quando o token não possui resource_access" do
+      it "retorna false" do
+        decoded_token = { "sub" => "user-id" }
+        allow(token_service).to receive(:decode_token).and_return(decoded_token)
+
+        KeycloakRails.configuration.permission_name = "access_role"
+
+        expect(service.user_has_permission?("test-token")).to be false
+      end
+    end
+
+    context "quando permission_name é nil" do
+      it "retorna true sem decodificar o token" do
+        KeycloakRails.configuration.permission_name = nil
+
+        expect(token_service).not_to receive(:decode_token)
+        expect(service.user_has_permission?("test-token")).to be true
+      end
+    end
+
+    context "quando permission_name é passado como argumento" do
+      it "usa o argumento em vez da configuração" do
+        decoded_token = {
+          "resource_access" => {
+            "test-client" => { "roles" => ["custom_permission"] }
+          }
+        }
+        allow(token_service).to receive(:decode_token).and_return(decoded_token)
+
+        KeycloakRails.configuration.permission_name = "access_role"
+
+        expect(service.user_has_permission?("test-token", "custom_permission")).to be true
+      end
+    end
+
+    context "quando decode_token levanta erro" do
+      it "retorna false" do
+        allow(token_service).to receive(:decode_token)
+          .and_raise(KeycloakRails::TokenInvalidError, "Token inválido")
+
+        KeycloakRails.configuration.permission_name = "access_role"
+
+        expect(service.user_has_permission?("test-token")).to be false
+      end
+    end
+  end
+
+  describe "#user_roles" do
+    it "retorna client roles e realm roles" do
+      decoded_token = {
+        "resource_access" => {
+          "test-client" => { "roles" => ["access_role", "admin"] }
+        },
+        "realm_access" => {
+          "roles" => ["offline_access", "uma_authorization"]
+        }
+      }
+      allow(token_service).to receive(:decode_token).and_return(decoded_token)
+
+      roles = service.user_roles("test-token")
+
+      expect(roles[:client_roles]).to eq(["access_role", "admin"])
+      expect(roles[:realm_roles]).to eq(["offline_access", "uma_authorization"])
+    end
+
+    it "retorna arrays vazios quando não há roles" do
+      decoded_token = { "sub" => "user-id" }
+      allow(token_service).to receive(:decode_token).and_return(decoded_token)
+
+      roles = service.user_roles("test-token")
+
+      expect(roles[:client_roles]).to eq([])
+      expect(roles[:realm_roles]).to eq([])
     end
   end
 end
