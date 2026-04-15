@@ -41,8 +41,10 @@ module KeycloakRails
 
         def sign_out_keycloak_user!
           user_id = session[:_keycloak_user_id]
+          id_token_value = nil
 
           if user_id
+            id_token_value = TokenStore.id_token(user_id)
             refresh_token_value = TokenStore.refresh_token(user_id)
             if refresh_token_value
               begin
@@ -58,7 +60,7 @@ module KeycloakRails
           session.delete(:_keycloak_authenticated)
           @_keycloak_current_user = nil
 
-          redirect_to keycloak_config.after_sign_out_path
+          redirect_to build_keycloak_logout_url(id_token_value), allow_other_host: true
         end
 
         private
@@ -88,13 +90,11 @@ module KeycloakRails
           stored_location || keycloak_config.after_sign_in_path
         end
 
-        def build_keycloak_logout_url(id_token)
-          params = URI.encode_www_form(
-            id_token_hint: id_token,
-            client_id: keycloak_config.client_id,
-            post_logout_redirect_uri: root_url
-          )
-          "#{keycloak_config.logout_url}?#{params}"
+        def build_keycloak_logout_url(id_token = nil)
+          logout_params = { client_id: keycloak_config.client_id, post_logout_redirect_uri: root_url }
+          logout_params[:id_token_hint] = id_token if id_token
+
+          "#{keycloak_config.logout_url}?#{URI.encode_www_form(logout_params)}"
         end
 
         def keycloak_config

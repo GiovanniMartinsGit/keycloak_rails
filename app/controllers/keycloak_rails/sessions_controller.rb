@@ -46,8 +46,10 @@ module KeycloakRails
 
     def destroy
       user_id = session[:_keycloak_user_id]
+      id_token_value = nil
 
       if user_id
+        id_token_value = TokenStore.id_token(user_id)
         refresh_token_value = TokenStore.refresh_token(user_id)
         revoke_keycloak_session(refresh_token_value) if refresh_token_value
         TokenStore.delete(user_id)
@@ -60,7 +62,7 @@ module KeycloakRails
 
       log_info("Logout realizado")
 
-      redirect_to keycloak_config.after_sign_out_path, status: :see_other
+      redirect_to build_logout_url(id_token_value), allow_other_host: true, status: :see_other
     end
 
     private
@@ -76,13 +78,11 @@ module KeycloakRails
       "#{keycloak_config.auth_url}?#{params}"
     end
 
-    def build_logout_url(id_token)
-      params = URI.encode_www_form(
-        id_token_hint: id_token,
-        client_id: keycloak_config.client_id,
-        post_logout_redirect_uri: main_app.root_url
-      )
-      "#{keycloak_config.logout_url}?#{params}"
+    def build_logout_url(id_token = nil)
+      logout_params = { client_id: keycloak_config.client_id, post_logout_redirect_uri: main_app.root_url }
+      logout_params[:id_token_hint] = id_token if id_token
+
+      "#{keycloak_config.logout_url}?#{URI.encode_www_form(logout_params)}"
     end
 
     def revoke_keycloak_session(refresh_token_value)
