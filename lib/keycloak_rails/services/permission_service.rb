@@ -7,20 +7,20 @@ module KeycloakRails
         permission = permission_name || keycloak_config.permission_name
         return true if permission.blank?
 
-        log_info("Verificando permissão '#{permission}' nas roles do client '#{keycloak_config.client_id}'")
+        log_info("Verificando autorização do usuário")
 
         decoded = decode_token_payload(access_token)
         client_roles = extract_client_roles(decoded)
 
         if client_roles.include?(permission)
-          log_info("Permissão '#{permission}' concedida (client role encontrada)")
+          log_info("Autorização concedida")
           true
         else
-          log_warn("Permissão '#{permission}' negada. Roles do client: #{client_roles.inspect}")
+          log_warn("Autorização negada")
           false
         end
       rescue StandardError => e
-        log_error("Erro ao verificar permissão: #{e.message}")
+        log_error("Erro ao verificar autorização: #{e.class}")
         false
       end
 

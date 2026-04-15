@@ -29,14 +29,14 @@ module KeycloakRails
       user = resolve_user(user_info)
 
       create_session(token_data, user)
-      log_info("Login realizado com sucesso para: #{user.email}")
+      log_info("Login realizado com sucesso")
 
       redirect_to after_sign_in_path
     rescue AuthenticationError, TokenInvalidError => e
       log_error("Erro de autenticação no callback: #{e.message}")
       handle_authentication_error(e)
     rescue PermissionDeniedError => e
-      log_error("Permissão negada: #{e.message}")
+      log_error("Acesso negado durante a autenticação")
       session[:_keycloak_authenticated] = true
       handle_permission_error(e)
     rescue UserNotFoundError => e
@@ -115,8 +115,7 @@ module KeycloakRails
       return if keycloak_config.permission_name.blank?
 
       unless permission_service.user_has_permission?(access_token)
-        raise PermissionDeniedError,
-              "Usuário não possui a permissão '#{keycloak_config.permission_name}' no client '#{keycloak_config.client_id}'"
+        raise PermissionDeniedError, "Usuário não autorizado para esta aplicação"
       end
     end
 

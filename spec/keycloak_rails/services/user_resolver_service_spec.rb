@@ -61,7 +61,7 @@ RSpec.describe KeycloakRails::Services::UserResolverService do
       it "levanta UserNotFoundError" do
         info = user_info.merge("email" => nil)
         expect { service.call(info) }
-          .to raise_error(KeycloakRails::UserNotFoundError, /Email não encontrado/)
+          .to raise_error(KeycloakRails::UserNotFoundError, /Dados do usuário incompletos/)
       end
     end
 
@@ -69,7 +69,7 @@ RSpec.describe KeycloakRails::Services::UserResolverService do
       it "levanta UserNotFoundError" do
         info = user_info.merge("sub" => nil)
         expect { service.call(info) }
-          .to raise_error(KeycloakRails::UserNotFoundError, /Keycloak ID/)
+          .to raise_error(KeycloakRails::UserNotFoundError, /Dados do usuário incompletos/)
       end
     end
   end

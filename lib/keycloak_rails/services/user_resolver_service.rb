@@ -7,10 +7,10 @@ module KeycloakRails
         email = user_info["email"]
         keycloak_id = user_info["sub"]
 
-        raise UserNotFoundError, "Email não encontrado nas informações do Keycloak" if email.blank?
-        raise UserNotFoundError, "Keycloak ID (sub) não encontrado" if keycloak_id.blank?
+        raise UserNotFoundError, "Dados do usuário incompletos" if email.blank?
+        raise UserNotFoundError, "Dados do usuário incompletos" if keycloak_id.blank?
 
-        log_info("Resolvendo usuário pelo email: #{email}")
+        log_info("Resolvendo usuário na aplicação")
 
         user = find_user(email)
 
@@ -18,7 +18,7 @@ module KeycloakRails
           user = create_user(email, keycloak_id, user_info)
         end
 
-        raise UserNotFoundError, "Usuário com email '#{email}' não encontrado na aplicação" if user.nil?
+        raise UserNotFoundError, "Usuário não encontrado na aplicação" if user.nil?
 
         sync_keycloak_id(user, keycloak_id)
         user
@@ -31,7 +31,7 @@ module KeycloakRails
       end
 
       def create_user(email, keycloak_id, user_info)
-        log_info("Criando novo usuário para: #{email}")
+        log_info("Criando usuário na aplicação")
         config.resource_model.create!(
           email: email,
           keycloak_id: keycloak_id,
@@ -45,7 +45,7 @@ module KeycloakRails
       def sync_keycloak_id(user, keycloak_id)
         return if user.keycloak_id == keycloak_id
 
-        log_info("Atualizando keycloak_id do usuário #{user.email}")
+        log_info("Atualizando vínculo do usuário com o provedor de identidade")
         user.update!(keycloak_id: keycloak_id)
       end
     end

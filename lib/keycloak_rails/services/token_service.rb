@@ -76,7 +76,7 @@ module KeycloakRails
             return @@jwks_cache
           end
 
-          log_info("Buscando JWKS do Keycloak")
+          log_info("Atualizando chaves de validação")
           response = http_client.get(config.certs_url)
           @@jwks_cache = JWT::JWK::Set.new(response)
           @@jwks_fetched_at = Time.now.to_i
