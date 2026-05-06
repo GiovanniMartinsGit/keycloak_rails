@@ -73,6 +73,7 @@ module KeycloakRails
         client_id: keycloak_config.client_id,
         redirect_uri: callback_url,
         scope: "openid email profile",
+        kc_idp_hint: "keycloak-oidc",
         state: state
       )
       "#{keycloak_config.auth_url}?#{params}"
