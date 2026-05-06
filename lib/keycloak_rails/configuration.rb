@@ -72,9 +72,6 @@ module KeycloakRails
       raise ConfigurationError, "client_secret é obrigatório" if client_secret.blank?
       raise ConfigurationError, "server_url é obrigatório" if server_url.blank?
       raise ConfigurationError, "realm é obrigatório" if realm.blank?
-      if !ssl_verify && defined?(Rails) && Rails.env.production?
-        raise ConfigurationError, "ssl_verify não pode ser false em produção"
-      end
     end
   end
 end
