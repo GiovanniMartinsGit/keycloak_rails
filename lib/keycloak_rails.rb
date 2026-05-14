@@ -24,18 +24,46 @@ require "keycloak_rails/engine" if defined?(Rails)
 
 module KeycloakRails
   class << self
-    def configuration
-      @configuration ||= Configuration.new
+    # Returns the configuration for +scope+.
+    # Scope :default is fully backward-compatible with the old single-config API.
+    # If the scope was never explicitly configured, returns a temporary
+    # default Configuration (not registered), so that `scopes` stays clean.
+    def configuration(scope = :default)
+      scope = scope.to_sym
+      @configurations ||= {}
+      @configurations[scope] || Configuration.new(scope)
     end
 
-    def configure
-      yield(configuration)
-      configuration.validate!
-      configuration
+    # Yields a Configuration for +scope+ and validates it.
+    # KeycloakRails.configure { |c| }            → scope :default (backward compat)
+    # KeycloakRails.configure(:servidor) { |c| } → named scope
+    def configure(scope = :default)
+      scope = scope.to_sym
+      @configurations ||= {}
+      @configurations[scope] ||= Configuration.new(scope)
+      yield(@configurations[scope])
+      @configurations[scope].validate!
+      @configurations[scope]
     end
 
-    def reset_configuration!
-      @configuration = Configuration.new
+    # Returns the list of scopes that have been explicitly configured.
+    def scopes
+      (@configurations || {}).keys
+    end
+
+    # Returns true when +scope+ has been explicitly configured.
+    def scope_configured?(scope)
+      scopes.include?(scope.to_sym)
+    end
+
+    # Resets the configuration for a single scope (useful in tests).
+    def reset_configuration!(scope = :default)
+      (@configurations ||= {}).delete(scope.to_sym)
+    end
+
+    # Resets ALL scope configurations (useful in tests).
+    def reset_all_configurations!
+      @configurations = {}
     end
   end
 end

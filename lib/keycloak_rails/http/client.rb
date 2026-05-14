@@ -5,8 +5,11 @@ module KeycloakRails
     class Client
       include Logging
 
-      def initialize(base_url: nil)
-        @base_url = base_url || KeycloakRails.configuration.server_url
+      # Accepts an explicit +config+ object so every scope can instantiate its
+      # own client pointing at the right Keycloak server / SSL settings.
+      def initialize(config: nil)
+        @config   = config || KeycloakRails.configuration
+        @base_url = @config.server_url
       end
 
       def post(url, body: {}, headers: {})
@@ -37,8 +40,8 @@ module KeycloakRails
       end
 
       def ssl_options
-        opts = { verify: KeycloakRails.configuration.ssl_verify }
-        ca_file = KeycloakRails.configuration.ca_file
+        opts = { verify: @config.ssl_verify }
+        ca_file = @config.ca_file
         opts[:ca_file] = ca_file if ca_file.present?
         opts
       end

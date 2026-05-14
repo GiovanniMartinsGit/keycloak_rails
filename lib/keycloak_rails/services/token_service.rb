@@ -69,30 +69,58 @@ module KeycloakRails
 
       private
 
+      # Fetches (and caches) the JWKS for the realm associated with this scope.
+      #
+      # Security: the cache is keyed by the full certs_url so that two scopes
+      # pointing at different realms (or different Keycloak instances) never
+      # share signing keys — preventing token confusion / cross-realm replay.
       def fetch_jwks
-        @@jwks_mutex ||= Monitor.new
-        @@jwks_mutex.synchronize do
-          if @@jwks_cache && @@jwks_fetched_at && (Time.now.to_i - @@jwks_fetched_at) < JWKS_CACHE_TTL
-            return @@jwks_cache
+        certs_url = config.certs_url
+
+        self.class.jwks_mutex.synchronize do
+          fetched_at = self.class.jwks_fetched_ats[certs_url]
+          cached     = self.class.jwks_caches[certs_url]
+
+          if cached && fetched_at && (Time.now.to_i - fetched_at) < JWKS_CACHE_TTL
+            return cached
           end
 
-          log_info("Atualizando chaves de validação")
-          response = http_client.get(config.certs_url)
-          @@jwks_cache = JWT::JWK::Set.new(response)
-          @@jwks_fetched_at = Time.now.to_i
-          @@jwks_cache
+          log_info("Atualizando chaves de validação (realm: #{config.realm})")
+          response = http_client.get(certs_url)
+          self.class.jwks_caches[certs_url]     = JWT::JWK::Set.new(response)
+          self.class.jwks_fetched_ats[certs_url] = Time.now.to_i
+          self.class.jwks_caches[certs_url]
         end
       end
 
       class << self
+        def jwks_mutex
+          @jwks_mutex ||= Monitor.new
+        end
+
+        def jwks_caches
+          @jwks_caches ||= {}
+        end
+
+        def jwks_fetched_ats
+          @jwks_fetched_ats ||= {}
+        end
+
         def clear_jwks_cache!
-          @@jwks_cache = nil
-          @@jwks_fetched_at = nil
+          jwks_mutex.synchronize do
+            @jwks_caches     = {}
+            @jwks_fetched_ats = {}
+          end
+        end
+
+        # Clear the JWKS cache for a specific realm (e.g. after key rotation).
+        def clear_jwks_cache_for!(certs_url)
+          jwks_mutex.synchronize do
+            jwks_caches.delete(certs_url)
+            jwks_fetched_ats.delete(certs_url)
+          end
         end
       end
-
-      @@jwks_cache = nil
-      @@jwks_fetched_at = nil
     end
   end
 end

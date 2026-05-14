@@ -10,6 +10,11 @@ class KeycloakGenerator < Rails::Generators::NamedBase
 
   desc "Configura o modelo para autenticação via Keycloak, adicionando os campos email e keycloak_id"
 
+  # Optional second argument to specify the authentication scope.
+  # Example: rails g keycloak Cidadao cidadao
+  argument :scope, type: :string, default: "default",
+           desc: "Escopo de autenticação (default, servidor, cidadao, ...)"
+
   def self.next_migration_number(dirname)
     ActiveRecord::Generators::Base.next_migration_number(dirname)
   end
@@ -34,19 +39,21 @@ class KeycloakGenerator < Rails::Generators::NamedBase
   end
 
   def update_initializer
-    initializer_file = "config/initializers/keycloak_rails.rb"
+    initializer_file = scope == "default" \
+      ? "config/initializers/keycloak_rails.rb" \
+      : "config/initializers/keycloak_rails_#{scope}.rb"
 
     if File.exist?(initializer_file)
       gsub_file initializer_file,
                 /config\.resource_model_class_name\s*=\s*".*"/,
                 "config.resource_model_class_name = \"#{class_name}\""
-      say_status :update, "Initializer atualizado com modelo #{class_name}", :green
+      say_status :update, "Initializer atualizado com modelo #{class_name} (scope: #{scope})", :green
     end
   end
 
   def show_instructions
     say ""
-    say "=== Modelo #{class_name} configurado para KeycloakRails! ===", :green
+    say "=== Modelo #{class_name} configurado para KeycloakRails! (scope: #{scope}) ===", :green
     say ""
     say "Execute a migration:", :yellow
     say "  rails db:migrate"

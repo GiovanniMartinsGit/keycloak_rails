@@ -1,0 +1,46 @@
+# frozen_string_literal: true
+
+KeycloakRails.configure(:<%= scope %>) do |config|
+  # URL do servidor Keycloak
+  config.server_url = ENV.fetch("KEYCLOAK_<%= scope.upcase %>_SERVER_URL", "http://localhost:8080")
+
+  # Nome do Realm
+  config.realm = ENV.fetch("KEYCLOAK_<%= scope.upcase %>_REALM", "master")
+
+  # Client ID (nome da aplicação no Keycloak)
+  config.client_id = ENV.fetch("KEYCLOAK_<%= scope.upcase %>_CLIENT_ID", "sua_aplicacao")
+
+  # Client Secret
+  config.client_secret = ENV.fetch("KEYCLOAK_<%= scope.upcase %>_CLIENT_SECRET", "seu_secret")
+
+  # Nome da classe do modelo de usuário deste escopo
+  config.resource_model_class_name = "User"
+
+  # Nome da client role exigida no client do Keycloak.
+  # Deixe nil para não exigir nenhuma permissão específica.
+  config.permission_name = nil
+
+  # Caminhos que não exigem autenticação (regex).
+  # Inclua o caminho do próprio engine para este escopo.
+  config.skip_paths = [
+    %r{\A/keycloak/<%= scope %>},
+    %r{\A/assets},
+    %r{\A/favicon}
+  ]
+
+  # Tolerância em segundos para expiração do token
+  config.token_expiration_tolerance = 10
+
+  # Caminho após login bem-sucedido
+  config.after_sign_in_path = "/"
+
+  # Caminho após logout
+  config.after_sign_out_path = "/"
+
+  # Rota para retorno quando o usuário não tiver permissão no callback
+  # Pode ser String ("/plano"), Symbol (:billing_path) ou Proc (-> { main_app.billing_path })
+  config.permission_denied_path = "/"
+
+  # Criar usuário automaticamente no primeiro login?
+  config.create_user_on_first_login = false
+end

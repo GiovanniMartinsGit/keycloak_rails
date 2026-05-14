@@ -18,6 +18,17 @@ module KeycloakRails
       end
     end
 
+    # Auto-mount only for the :default scope (backward compatibility).
+    # Named scopes (e.g. :servidor, :cidadao) MUST be mounted manually in the
+    # application's routes.rb, passing the scope name via `defaults:`:
+    #
+    #   mount KeycloakRails::Engine, at: "/keycloak/servidor",
+    #         as: "keycloak_servidor",
+    #         defaults: { keycloak_scope: "servidor" }
+    #
+    #   mount KeycloakRails::Engine, at: "/keycloak/cidadao",
+    #         as: "keycloak_cidadao",
+    #         defaults: { keycloak_scope: "cidadao" }
     initializer "keycloak_rails.append_routes" do |app|
       app.routes.append do
         mount KeycloakRails::Engine, at: "/keycloak"

@@ -8,10 +8,10 @@ module KeycloakRails
 
     def new
       state = SecureRandom.hex(24)
-      session[:keycloak_oauth_state] = state
+      session[oauth_state_key] = state
 
       authorize_url = build_authorize_url(state)
-      log_info("Redirecionando para Keycloak para autenticação")
+      log_info("Redirecionando para Keycloak para autenticação (scope=#{current_scope})")
 
       if request.headers["Turbo-Frame"].present? || request.media_type == "text/vnd.turbo-stream.html"
         render html: "<html><body><script>window.location.replace(#{authorize_url.to_json})</script></body></html>".html_safe, layout: false
@@ -24,12 +24,12 @@ module KeycloakRails
       validate_state!
 
       token_data = exchange_code_for_tokens
-      user_info = fetch_user_info(token_data["access_token"])
+      user_info  = fetch_user_info(token_data["access_token"])
       validate_permission!(token_data["access_token"])
       user = resolve_user(user_info)
 
       create_session(token_data, user)
-      log_info("Login realizado com sucesso")
+      log_info("Login realizado com sucesso (scope=#{current_scope})")
 
       redirect_to after_sign_in_path
     rescue AuthenticationError, TokenInvalidError => e
@@ -37,7 +37,7 @@ module KeycloakRails
       handle_authentication_error(e)
     rescue PermissionDeniedError => e
       log_error("Acesso negado durante a autenticação")
-      session[:_keycloak_authenticated] = true
+      session[authenticated_key] = true
       handle_permission_error(e)
     rescue UserNotFoundError => e
       log_error("Usuário não encontrado: #{e.message}")
@@ -45,36 +45,87 @@ module KeycloakRails
     end
 
     def destroy
-      user_id = session[:_keycloak_user_id]
+      user_id = session[user_id_key]
       id_token_value = nil
 
       if user_id
-        id_token_value = TokenStore.id_token(user_id)
-        refresh_token_value = TokenStore.refresh_token(user_id)
+        id_token_value      = TokenStore.id_token(user_id, scope: current_scope)
+        refresh_token_value = TokenStore.refresh_token(user_id, scope: current_scope)
         revoke_keycloak_session(refresh_token_value) if refresh_token_value
-        TokenStore.delete(user_id)
+        TokenStore.delete(user_id, scope: current_scope)
       end
 
-      session.delete(:_keycloak_user_id)
-      session.delete(:_keycloak_authenticated)
-      session.delete(:keycloak_oauth_state)
-      session.delete(:keycloak_rails_return_to)
+      session.delete(user_id_key)
+      session.delete(authenticated_key)
+      session.delete(oauth_state_key)
+      session.delete(return_to_key)
 
-      log_info("Logout realizado")
+      log_info("Logout realizado (scope=#{current_scope})")
 
       redirect_to build_logout_url(id_token_value), allow_other_host: true, status: :see_other
     end
 
     private
 
+    # ── Scope resolution ──────────────────────────────────────────────────────
+
+    # Resolves the authentication scope from the route default (:keycloak_scope).
+    # Security (OWASP A01 – Broken Access Control):
+    #   The value is injected by Rails routing (via `defaults:`) and then
+    #   validated against the set of explicitly registered scopes.  An attacker
+    #   cannot forge a request that references an unregistered scope because we
+    #   raise AuthenticationError before any credential exchange occurs.
+    def current_scope
+      @current_scope ||= begin
+        raw = params[:keycloak_scope].presence
+        return :default if raw.blank?
+
+        scope_sym = raw.to_sym
+        unless KeycloakRails.scope_configured?(scope_sym)
+          raise AuthenticationError, "Escopo de autenticação inválido"
+        end
+
+        scope_sym
+      end
+    end
+
+    def keycloak_config
+      KeycloakRails.configuration(current_scope)
+    end
+
+    # Use the scoped logger (OWASP A09 – Security Logging and Monitoring Failures)
+    def logger
+      keycloak_config.logger
+    end
+
+    # ── Session key helpers ───────────────────────────────────────────────────
+
+    def user_id_key
+      Configuration.session_key_for(:user_id, current_scope)
+    end
+
+    def authenticated_key
+      Configuration.session_key_for(:authenticated, current_scope)
+    end
+
+    def oauth_state_key
+      Configuration.session_key_for(:oauth_state, current_scope)
+    end
+
+    def return_to_key
+      Configuration.session_key_for(:return_to, current_scope)
+    end
+
+    # ── OAuth / OIDC helpers ──────────────────────────────────────────────────
+
     def build_authorize_url(state)
       params = URI.encode_www_form(
         response_type: "code",
-        client_id: keycloak_config.client_id,
-        redirect_uri: callback_url,
-        scope: "openid email profile",
-        kc_idp_hint: "keycloak-oidc",
-        state: state
+        client_id:     keycloak_config.client_id,
+        redirect_uri:  callback_url,
+        scope:         "openid email profile",
+        kc_idp_hint:   "keycloak-oidc",
+        state:         state
       )
       "#{keycloak_config.auth_url}?#{params}"
     end
@@ -93,9 +144,12 @@ module KeycloakRails
     end
 
     def validate_state!
-      expected_state = session.delete(:keycloak_oauth_state)
+      expected_state = session.delete(oauth_state_key)
       received_state = params[:state]
 
+      # Security (OWASP A01 – CSRF via OAuth state mismatch):
+      #   Each scope stores its state under an isolated session key, so states
+      #   from different scopes cannot be cross-validated.
       if expected_state.blank? || received_state != expected_state
         raise AuthenticationError, "State OAuth inválido"
       end
@@ -125,8 +179,8 @@ module KeycloakRails
     end
 
     def create_session(token_data, user)
-      TokenStore.store(user.id, token_data)
-      session[:_keycloak_user_id] = user.id
+      TokenStore.store(user.id, token_data, scope: current_scope)
+      session[user_id_key] = user.id
     end
 
     def callback_url
@@ -134,7 +188,8 @@ module KeycloakRails
     end
 
     def after_sign_in_path
-      stored = session.delete(:keycloak_rails_return_to)
+      stored = session.delete(return_to_key)
+      # Security (OWASP A01 – Open Redirect): only allow own-origin relative paths
       if stored.present? && stored.start_with?("/") && !stored.start_with?("//")
         stored
       else
@@ -142,39 +197,37 @@ module KeycloakRails
       end
     end
 
-    def handle_authentication_error(error)
+    def handle_authentication_error(_error)
       flash[:alert] = "Falha na autenticação. Tente novamente."
       redirect_to main_app.root_path
     end
 
-    def handle_permission_error(error)
+    def handle_permission_error(_error)
       flash[:alert] = "Você não possui permissão para acessar esta aplicação."
       redirect_to resolve_permission_denied_path
     end
 
-    def handle_user_not_found_error(error)
+    def handle_user_not_found_error(_error)
       flash[:alert] = "Usuário não encontrado na aplicação. Contate o administrador."
       redirect_to main_app.root_path
     end
 
+    # ── Services ──────────────────────────────────────────────────────────────
+
     def token_service
-      @token_service ||= Services::TokenService.new
+      @token_service ||= Services::TokenService.new(scope: current_scope)
     end
 
     def user_info_service
-      @user_info_service ||= Services::UserInfoService.new
+      @user_info_service ||= Services::UserInfoService.new(scope: current_scope)
     end
 
     def permission_service
-      @permission_service ||= Services::PermissionService.new
+      @permission_service ||= Services::PermissionService.new(scope: current_scope)
     end
 
     def user_resolver_service
-      @user_resolver_service ||= Services::UserResolverService.new
-    end
-
-    def keycloak_config
-      KeycloakRails.configuration
+      @user_resolver_service ||= Services::UserResolverService.new(scope: current_scope)
     end
 
     def resolve_permission_denied_path

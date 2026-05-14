@@ -8,7 +8,8 @@ module KeycloakRails
       end
 
       def keycloak_session_active?
-        keycloak_user_signed_in? || session[:_keycloak_authenticated] == true
+        # Delegates to the controller concern which is scope-aware.
+        keycloak_user_signed_in? || session[keycloak_session_key(:authenticated)] == true
       end
 
       def keycloak_login_path

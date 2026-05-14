@@ -11,7 +11,10 @@ module KeycloakRails
                   :permission_denied_path,
                   :ssl_verify, :ca_file
 
-    def initialize
+    attr_reader :scope
+
+    def initialize(scope = :default)
+      @scope = scope.to_sym
       @server_url = ENV.fetch("KEYCLOAK_SERVER_URL", "http://localhost:8080")
       @realm = ENV.fetch("KEYCLOAK_REALM", "master")
       @client_id = ENV.fetch("KEYCLOAK_CLIENT_ID", nil)
@@ -27,6 +30,33 @@ module KeycloakRails
       @permission_denied_path = "/"
       @ssl_verify = true
       @ca_file = nil
+    end
+
+    # Maps a logical session key name to the actual Rails session hash key,
+    # preserving backward compatibility for the :default scope.
+    #
+    # Security (OWASP A01 – Broken Access Control):
+    #   Each scope uses isolated session keys, preventing cross-scope session
+    #   confusion where a :cidadao session could be mistaken for a :servidor one.
+    #
+    # :default scope keeps the original key names so existing sessions are
+    # not invalidated after upgrading to the multi-scope version.
+    def self.session_key_for(name, scope)
+      scope = scope.to_sym
+      name  = name.to_sym
+
+      if scope == :default
+        case name
+        when :user_id     then :_keycloak_user_id
+        when :authenticated then :_keycloak_authenticated
+        when :oauth_state   then :keycloak_oauth_state
+        when :return_to     then :keycloak_rails_return_to
+        else :"_keycloak_#{name}"
+        end
+      else
+        # Named scopes: _keycloak_<scope>_<name>
+        :"_keycloak_#{scope}_#{name}"
+      end
     end
 
     def realm_url
@@ -72,6 +102,16 @@ module KeycloakRails
       raise ConfigurationError, "client_secret é obrigatório" if client_secret.blank?
       raise ConfigurationError, "server_url é obrigatório" if server_url.blank?
       raise ConfigurationError, "realm é obrigatório" if realm.blank?
+
+      # Security (OWASP A05 – Security Misconfiguration):
+      # Freeze critical credentials after validation to prevent runtime
+      # tampering with authentication parameters (e.g. via mass-assignment
+      # or monkey-patching in a compromised dependency).
+      @client_id      = @client_id.freeze
+      @client_secret  = @client_secret.freeze
+      @server_url     = @server_url.freeze
+      @realm          = @realm.freeze
+      @permission_name = @permission_name.freeze
     end
   end
 end

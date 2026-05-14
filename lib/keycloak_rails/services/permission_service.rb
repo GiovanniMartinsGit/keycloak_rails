@@ -4,7 +4,7 @@ module KeycloakRails
   module Services
     class PermissionService < BaseService
       def user_has_permission?(access_token, permission_name = nil)
-        permission = permission_name || keycloak_config.permission_name
+        permission = permission_name || config.permission_name
         return true if permission.blank?
 
         log_info("Verificando autorização do usuário")
@@ -35,20 +35,16 @@ module KeycloakRails
       private
 
       def decode_token_payload(access_token)
-        Services::TokenService.new.decode_token(access_token)
+        # Reuse the same scope so the right JWKS / issuer is validated.
+        Services::TokenService.new(scope: @scope).decode_token(access_token)
       end
 
       def extract_client_roles(decoded)
-        client_id = keycloak_config.client_id
-        decoded.dig("resource_access", client_id, "roles") || []
+        decoded.dig("resource_access", config.client_id, "roles") || []
       end
 
       def extract_realm_roles(decoded)
         decoded.dig("realm_access", "roles") || []
-      end
-
-      def keycloak_config
-        KeycloakRails.configuration
       end
     end
   end
