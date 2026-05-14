@@ -4,11 +4,14 @@ Gem para integração do **Keycloak** como sistema de autenticação em aplicaç
 
 Funciona como **Rack Middleware**, gerenciando sessões via **OpenID Connect**, com verificação segura de tokens JWT (assinatura via JWKS) e controle de permissões por **Client Roles** do Keycloak.
 
+Suporta **múltiplos escopos de autenticação** na mesma aplicação (ex.: servidores e cidadãos com Realms, clients e rotas completamente independentes), mantendo total compatibilidade retroativa com projetos de escopo único.
+
 ## Características
 
 - **Substitui o Devise** — Autenticação completa via Keycloak (login, logout, sessões)
+- **Múltiplos escopos independentes** — Dois ou mais domínios de autenticação na mesma app, sem interferência entre si
 - **Rack Middleware** — Gerenciamento automático de sessão e renovação de tokens expirados
-- **JWT com verificação de assinatura** — Tokens são validados criptograficamente via JWKS (RS256), com cache automático
+- **JWT com verificação de assinatura** — Tokens são validados criptograficamente via JWKS (RS256), com cache automático por Realm
 - **Permissões por Client Roles** — Verifica se o usuário possui a role necessária no client do Keycloak
 - **Vínculo por Email** — Identifica o usuário na aplicação pelo email e sincroniza o `keycloak_id` automaticamente
 - **Revogação de sessão** — Logout revoga a sessão no Keycloak via refresh token (backchannel)
@@ -43,7 +46,11 @@ Execute:
 bundle install
 ```
 
-## Configuração
+---
+
+## Modo 1 — Escopo único (padrão / legado)
+
+Use este modo quando a aplicação possui apenas um domínio de autenticação (ex.: somente servidores, ou somente cidadãos). É totalmente compatível com versões anteriores da gem.
 
 ### 1. Instalar o inicializador
 
@@ -51,7 +58,7 @@ bundle install
 rails g keycloak:install
 ```
 
-Cria o arquivo `config/initializers/keycloak_rails.rb` com todas as opções documentadas.
+Cria `config/initializers/keycloak_rails.rb`.
 
 ### 2. Configurar o modelo de usuário
 
@@ -59,140 +66,266 @@ Cria o arquivo `config/initializers/keycloak_rails.rb` com todas as opções doc
 rails g keycloak Usuario
 ```
 
-Este comando:
-
-- Cria uma migration para adicionar `keycloak_id` ao modelo `Usuario`
-- Injeta o concern `KeycloakAuthenticatable` no modelo
-- Atualiza o inicializador com o nome do modelo
-
-Execute a migration:
+Cria a migration de `keycloak_id`, injeta o concern no modelo e atualiza o inicializador. Em seguida:
 
 ```bash
 rails db:migrate
 ```
 
-### 3. Configurar variáveis de ambiente
+### 3. Variáveis de ambiente
 
 ```bash
-export KEYCLOAK_SERVER_URL="https://sso.seudominio.com.br"
-export KEYCLOAK_REALM="MeuRealm"
-export KEYCLOAK_CLIENT_ID="minha-aplicacao"
-export KEYCLOAK_CLIENT_SECRET="seu-client-secret"
+KEYCLOAK_SERVER_URL="https://sso.seudominio.com.br"
+KEYCLOAK_REALM="MeuRealm"
+KEYCLOAK_CLIENT_ID="minha-aplicacao"
+KEYCLOAK_CLIENT_SECRET="seu-client-secret"
 ```
 
-### 4. Configurar o inicializador
-
-Edite `config/initializers/keycloak_rails.rb`:
+### 4. Inicializador
 
 ```ruby
+# config/initializers/keycloak_rails.rb
 KeycloakRails.configure do |config|
-  config.server_url = ENV.fetch("KEYCLOAK_SERVER_URL")
-  config.realm = ENV.fetch("KEYCLOAK_REALM")
-  config.client_id = ENV.fetch("KEYCLOAK_CLIENT_ID")
+  config.server_url  = ENV.fetch("KEYCLOAK_SERVER_URL")
+  config.realm       = ENV.fetch("KEYCLOAK_REALM")
+  config.client_id   = ENV.fetch("KEYCLOAK_CLIENT_ID")
   config.client_secret = ENV.fetch("KEYCLOAK_CLIENT_SECRET")
 
-  # Modelo de usuário da aplicação
   config.resource_model_class_name = "Usuario"
+  config.permission_name           = "access_minha_aplicacao"
 
-  # Client Role exigida para acesso (configurada no Keycloak)
-  # Deixe nil para não exigir role específica
-  config.permission_name = "access_minha_aplicacao"
+  config.skip_paths = [%r{\A/assets}, %r{\A/paginas_publicas}]
 
-  # Caminhos que não exigem autenticação (além de /keycloak/* que é automático)
-  config.skip_paths = [
-    %r{\A/assets},
-    %r{\A/paginas_publicas}
-  ]
-
-  # Criar usuário automaticamente no primeiro login via Keycloak?
   config.create_user_on_first_login = false
-
-  # Caminhos de redirecionamento pós-login/logout
-  config.after_sign_in_path = "/"
+  config.after_sign_in_path  = "/"
   config.after_sign_out_path = "/"
 
-  # Retorno quando o usuário autentica, mas não tem a role exigida
-  # Aceita String, Symbol (helper de rota) ou Proc
-  # Ex.: "/401", :permission_denied_path, ->(env) { "/custom_path" }
-  config.permission_denied_path = "/401"
-
-  # HTTP status do retorno por falta de permissão de acesso(padrão: 401)
+  config.permission_denied_path   = "/401"
   config.permission_denied_status = :unauthorized
 
-  # SSL (padrão: true). Não pode ser false em produção.
   config.ssl_verify = true
-  # config.ca_file = "/caminho/para/ca-bundle.crt"  # Opcional
+  # config.ca_file = "/caminho/para/ca-bundle.crt"
 end
 ```
 
-## Uso
+> A engine é montada automaticamente em `/keycloak` pelo initializer da gem.
 
-### Proteger Controllers
-
-Similar ao Devise, use `before_action` nos controllers:
+### 5. Proteger controllers
 
 ```ruby
 class ApplicationController < ActionController::Base
   before_action :authenticate_keycloak_user!
 end
-```
 
-Para controllers públicos:
-
-```ruby
 class PaginasPublicasController < ApplicationController
   skip_before_action :authenticate_keycloak_user!
 end
 ```
 
-### Helpers Disponíveis
+---
 
-Nos controllers e views:
+## Modo 2 — Múltiplos escopos de autenticação
+
+Use este modo quando a aplicação precisa de **dois ou mais domínios de autenticação independentes** (ex.: servidores internos + cidadãos via GOV.br). Cada escopo tem seu próprio Realm, client, modelo de usuário, rotas e sessão isolada.
+
+### 1. Instalar os inicializadores
+
+```bash
+rails g keycloak:install servidor
+rails g keycloak:install cidadao
+```
+
+Cria `config/initializers/keycloak_rails_servidor.rb` e `keycloak_rails_cidadao.rb`.
+
+### 2. Configurar os modelos de usuário
+
+```bash
+rails g keycloak Servidor servidor
+rails g keycloak Cidadao cidadao
+```
+
+Cria as migrations e injeta o concern em cada modelo. Em seguida:
+
+```bash
+rails db:migrate
+```
+
+### 3. Variáveis de ambiente
+
+```bash
+# Escopo servidor
+KEYCLOAK_SERVIDOR_SERVER_URL="https://sso.seudominio.com.br"
+KEYCLOAK_SERVIDOR_REALM="servidores"
+KEYCLOAK_SERVIDOR_CLIENT_ID="app-servidor"
+KEYCLOAK_SERVIDOR_CLIENT_SECRET="secret-servidor"
+
+# Escopo cidadão
+KEYCLOAK_CIDADAO_SERVER_URL="https://sso.acesso.gov.br"
+KEYCLOAK_CIDADAO_REALM="cidadaos"
+KEYCLOAK_CIDADAO_CLIENT_ID="app-cidadao"
+KEYCLOAK_CIDADAO_CLIENT_SECRET="secret-cidadao"
+```
+
+### 4. Inicializadores
 
 ```ruby
-# Usuário atual (equivalente ao current_user do Devise)
-current_user
+# config/initializers/keycloak_rails_servidor.rb
+KeycloakRails.configure(:servidor) do |config|
+  config.server_url    = ENV.fetch("KEYCLOAK_SERVIDOR_SERVER_URL")
+  config.realm         = ENV.fetch("KEYCLOAK_SERVIDOR_REALM")
+  config.client_id     = ENV.fetch("KEYCLOAK_SERVIDOR_CLIENT_ID")
+  config.client_secret = ENV.fetch("KEYCLOAK_SERVIDOR_CLIENT_SECRET")
 
-# Verificar se está autenticado
-keycloak_user_signed_in?
+  config.resource_model_class_name = "Servidor"
+  config.permission_name           = "acesso_sistema"  # role obrigatória
+
+  config.skip_paths          = [%r{\A/assets}]
+  config.after_sign_in_path  = "/admin"
+  config.after_sign_out_path = "/admin/login"
+
+  config.permission_denied_path   = "/403"
+  config.permission_denied_status = :forbidden
+end
+
+# config/initializers/keycloak_rails_cidadao.rb
+KeycloakRails.configure(:cidadao) do |config|
+  config.server_url    = ENV.fetch("KEYCLOAK_CIDADAO_SERVER_URL")
+  config.realm         = ENV.fetch("KEYCLOAK_CIDADAO_REALM")
+  config.client_id     = ENV.fetch("KEYCLOAK_CIDADAO_CLIENT_ID")
+  config.client_secret = ENV.fetch("KEYCLOAK_CIDADAO_CLIENT_SECRET")
+
+  config.resource_model_class_name = "Cidadao"
+  config.permission_name           = nil  # cidadão não precisa de role específica
+
+  config.skip_paths          = [%r{\A/assets}, %r{\A/portal/publico}]
+  config.after_sign_in_path  = "/portal"
+  config.after_sign_out_path = "/portal"
+
+  # Hint para o Keycloak redirecionar direto para o GOV.br
+  # config.idp_hint = "govbr"
+end
+```
+
+### 5. Rotas
+
+Escopos nomeados **devem** ser montados manualmente. A engine **não** é montada automaticamente quando há escopos nomeados.
+
+```ruby
+# config/routes.rb
+Rails.application.routes.draw do
+  mount KeycloakRails::Engine,
+        at:       "/keycloak/servidor",
+        as:       "keycloak_servidor",
+        defaults: { keycloak_scope: "servidor" }
+
+  mount KeycloakRails::Engine,
+        at:       "/keycloak/cidadao",
+        as:       "keycloak_cidadao",
+        defaults: { keycloak_scope: "cidadao" }
+
+  # suas rotas normais...
+end
+```
+
+Isso expõe:
+
+| Rota                               | Escopo   |
+| ---------------------------------- | -------- |
+| `GET  /keycloak/servidor/login`    | Servidor |
+| `GET  /keycloak/servidor/callback` | Servidor |
+| `DELETE /keycloak/servidor/logout` | Servidor |
+| `GET  /keycloak/cidadao/login`     | Cidadão  |
+| `GET  /keycloak/cidadao/callback`  | Cidadão  |
+| `DELETE /keycloak/cidadao/logout`  | Cidadão  |
+
+### 6. Controllers
+
+Defina `keycloak_scope` no controller base de cada área:
+
+```ruby
+# app/controllers/admin/base_controller.rb
+class Admin::BaseController < ApplicationController
+  def keycloak_scope = :servidor
+  before_action :authenticate_keycloak_user!
+end
+
+# app/controllers/portal/base_controller.rb
+class Portal::BaseController < ApplicationController
+  def keycloak_scope = :cidadao
+  # before_action opcional — cidadãos podem ter páginas públicas
+end
+
+# app/controllers/portal/area_restrita_controller.rb
+class Portal::AreaRestritaController < Portal::BaseController
+  before_action :authenticate_keycloak_user!
+end
+```
+
+### 7. Views
+
+Use os helpers com o escopo correto:
+
+```erb
+<%# Área do servidor %>
+<% if keycloak_user_signed_in? %>
+  Olá, <%= current_user.nome %>
+  <%= keycloak_logout_button "Sair", scope: :servidor, class: "btn btn-outline-danger" %>
+<% else %>
+  <%= link_to "Entrar", keycloak_servidor.login_path %>
+<% end %>
+
+<%# Área do cidadão %>
+<% if keycloak_user_signed_in? %>
+  Olá, <%= current_user.nome %>
+  <%= keycloak_logout_button "Sair", scope: :cidadao %>
+<% else %>
+  <%= link_to "Acessar com GOV.br", keycloak_cidadao.login_path %>
+<% end %>
+```
+
+### Isolamento de sessão
+
+As chaves de sessão são **completamente isoladas** por escopo. Um usuário autenticado como `:servidor` não interfere na sessão `:cidadao`:
+
+| Campo       | Escopo `:default`          | Escopo `:servidor`                  | Escopo `:cidadao`                  |
+| ----------- | -------------------------- | ----------------------------------- | ---------------------------------- |
+| user_id     | `:_keycloak_user_id`       | `:_keycloak_servidor_user_id`       | `:_keycloak_cidadao_user_id`       |
+| autenticado | `:_keycloak_authenticated` | `:_keycloak_servidor_authenticated` | `:_keycloak_cidadao_authenticated` |
+| oauth_state | `:keycloak_oauth_state`    | `:_keycloak_servidor_oauth_state`   | `:_keycloak_cidadao_oauth_state`   |
+
+---
+
+## Uso
+
+### Helpers disponíveis nos controllers e views
+
+```ruby
+current_user              # usuário autenticado no escopo atual
+keycloak_user_signed_in?  # true/false
 ```
 
 ### Logout
 
-O logout deve ser feito via `DELETE` (por segurança contra CSRF). Use o helper da gem:
+Use o helper para gerar um botão compatível com Turbo/Hotwire:
 
 ```erb
 <%= keycloak_logout_button "Sair" %>
+<%= keycloak_logout_button "Sair", class: "btn btn-danger" %>
 ```
 
-O helper gera um `button_to` com `data-turbo: false` automaticamente, garantindo compatibilidade com Turbo/Hotwire.
-
-Você também pode personalizar:
-
-```erb
-<%= keycloak_logout_button "Encerrar sessão", class: "btn btn-danger" %>
-```
-
-Ou construir manualmente:
+Ou manualmente (escopo único):
 
 ```erb
 <%= button_to "Sair", keycloak_logout_path, method: :delete, data: { turbo: false } %>
 ```
 
-### Exemplo completo de layout
+Manualmente com escopo nomeado:
 
 ```erb
-<nav>
-  <% if keycloak_user_signed_in? %>
-    <span>Olá, <%= current_user.nome %></span>
-    <%= keycloak_logout_button "Sair", class: "btn btn-outline-danger" %>
-  <% else %>
-    <%= link_to "Entrar", keycloak_login_path, class: "btn btn-primary" %>
-  <% end %>
-</nav>
+<%= button_to "Sair", keycloak_servidor.logout_path, method: :delete, data: { turbo: false } %>
 ```
 
-### Logout programático (em controllers)
+### Logout programático em controllers
 
 ```ruby
 class SeuController < ApplicationController
@@ -202,9 +335,9 @@ class SeuController < ApplicationController
 end
 ```
 
-### Rotas
+### Rotas (escopo único)
 
-A gem monta automaticamente as seguintes rotas em `/keycloak`:
+A engine é montada automaticamente em `/keycloak`:
 
 | Rota                 | Método   | Descrição                                     |
 | -------------------- | -------- | --------------------------------------------- |
