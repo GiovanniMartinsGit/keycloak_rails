@@ -127,5 +127,12 @@ RSpec.describe KeycloakRails::Controllers::Concerns::Authentication do
       expect(controller).not_to receive(:redirect_to)
       controller.authenticate_keycloak_user!
     end
+
+    it "falha cedo quando a configuracao do Keycloak esta incompleta" do
+      KeycloakRails.configuration.client_id = nil
+
+      expect { controller.authenticate_keycloak_user! }
+        .to raise_error(KeycloakRails::ConfigurationError, /client_id/)
+    end
   end
 end

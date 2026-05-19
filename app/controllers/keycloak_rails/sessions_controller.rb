@@ -90,7 +90,11 @@ module KeycloakRails
     end
 
     def keycloak_config
-      KeycloakRails.configuration(current_scope)
+      @keycloak_config ||= begin
+        config = KeycloakRails.configuration(current_scope)
+        config.validate!
+        config
+      end
     end
 
     # Use the scoped logger (OWASP A09 – Security Logging and Monitoring Failures)
@@ -183,7 +187,7 @@ module KeycloakRails
     end
 
     def callback_url
-      keycloak_rails.callback_url
+      url_for(action: :callback, only_path: false)
     end
 
     def after_sign_in_path

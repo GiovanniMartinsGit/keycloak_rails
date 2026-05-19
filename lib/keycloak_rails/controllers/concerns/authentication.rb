@@ -132,7 +132,11 @@ module KeycloakRails
         end
 
         def keycloak_config
-          KeycloakRails.configuration(keycloak_scope)
+          @_keycloak_config ||= begin
+            config = KeycloakRails.configuration(keycloak_scope)
+            config.validate!
+            config
+          end
         end
       end
     end

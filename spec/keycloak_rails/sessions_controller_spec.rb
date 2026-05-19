@@ -7,6 +7,17 @@ RSpec.describe KeycloakRails::SessionsController do
 
   let(:flash_hash) { {} }
   let(:main_app) { instance_double("MainAppRoutes", root_path: "/", billing_path: "/billing") }
+  let(:servidor_config) do
+    KeycloakRails.configure(:servidor) do |c|
+      c.server_url = "http://keycloak.test"
+      c.realm = "test-realm"
+      c.client_id = "servidor-client"
+      c.client_secret = "test-secret"
+      c.resource_model_class_name = "User"
+      c.permission_name = nil
+      c.logger = Logger.new(File::NULL)
+    end
+  end
 
   before do
     allow(controller).to receive(:flash).and_return(flash_hash)
@@ -38,6 +49,27 @@ RSpec.describe KeycloakRails::SessionsController do
 
       expect { controller.send(:resolve_permission_denied_path) }
         .to raise_error(KeycloakRails::ConfigurationError, /permission_denied_path/)
+    end
+  end
+
+  describe "#callback_url" do
+    it "usa a rota atual da engine ao inves do proxy montado" do
+      servidor_config
+      allow(controller).to receive(:current_scope).and_return(:servidor)
+      allow(controller).to receive(:url_for)
+        .with(action: :callback, only_path: false)
+        .and_return("http://app.test/keycloak/servidor/callback")
+
+      expect(controller.send(:callback_url)).to eq("http://app.test/keycloak/servidor/callback")
+    end
+  end
+
+  describe "#keycloak_config" do
+    it "falha cedo quando a configuracao obrigatoria esta incompleta" do
+      KeycloakRails.configuration.client_id = nil
+
+      expect { controller.send(:keycloak_config) }
+        .to raise_error(KeycloakRails::ConfigurationError, /client_id/)
     end
   end
 

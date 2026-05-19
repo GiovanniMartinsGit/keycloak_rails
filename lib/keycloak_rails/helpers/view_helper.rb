@@ -13,11 +13,11 @@ module KeycloakRails
       end
 
       def keycloak_login_path
-        keycloak_rails.login_path
+        keycloak_route_proxy.login_path
       end
 
       def keycloak_logout_path
-        keycloak_rails.logout_path
+        keycloak_route_proxy.logout_path
       end
 
       def keycloak_logout_button(text = "Sair", **options)
@@ -25,7 +25,17 @@ module KeycloakRails
           method: :delete,
           data: { turbo: false }
         )
-        button_to text, keycloak_rails.logout_path, **html_options
+        button_to text, keycloak_logout_path, **html_options
+      end
+
+      private
+
+      def keycloak_route_proxy
+        scope = respond_to?(:keycloak_scope) ? keycloak_scope.to_sym : :default
+        return keycloak_rails if scope == :default
+
+        route_proxy = :"keycloak_#{scope}"
+        respond_to?(route_proxy, true) ? send(route_proxy) : keycloak_rails
       end
     end
   end
