@@ -22,6 +22,7 @@ ActiveRecord::Schema.define do
     t.string :email
     t.string :keycloak_id
     t.string :nome
+    t.string :cpf
     t.timestamps
   end
 end

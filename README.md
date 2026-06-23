@@ -82,6 +82,11 @@ KeycloakRails.configure do |config|
   config.token_expiration_tolerance = 10
   config.create_user_on_first_login = false
   config.ssl_verify = true
+
+  # Mapeamento de campos customizados (opcional)
+  #config.model_email_field = :email
+  #config.model_name_field = :nome
+  #config.model_cpf_field = :cpf
 end
 ```
 
@@ -270,6 +275,9 @@ Campos suportados em KeycloakRails::Configuration:
 - create_user_on_first_login
 - ssl_verify
 - ca_file
+- model_email_field
+- model_name_field
+- model_cpf_field
 
 ## Erros comuns e como corrigir
 

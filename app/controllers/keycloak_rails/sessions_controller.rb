@@ -60,6 +60,14 @@ module KeycloakRails
       session.delete(oauth_state_key)
       session.delete(return_to_key)
 
+      if defined?(Devise) && respond_to?(:sign_out)
+        begin
+          sign_out(current_scope)
+        rescue ArgumentError
+          sign_out(:user) rescue nil
+        end
+      end
+
       log_info("Logout realizado (scope=#{current_scope})")
 
       redirect_to build_logout_url(id_token_value), allow_other_host: true, status: :see_other
@@ -184,6 +192,15 @@ module KeycloakRails
     def create_session(token_data, user)
       TokenStore.store(user.id, token_data, scope: current_scope)
       session[user_id_key] = user.id
+
+      if defined?(Devise) && respond_to?(:sign_in)
+        begin
+          sign_in(current_scope, user)
+        rescue ArgumentError
+          # Scope might not match devise mapping exactly, fallback to generic
+          sign_in(user) rescue nil
+        end
+      end
     end
 
     def callback_url
@@ -210,9 +227,14 @@ module KeycloakRails
       redirect_to resolve_permission_denied_path
     end
 
-    def handle_user_not_found_error(_error)
-      flash[:alert] = "Usuário não encontrado na aplicação. Contate o administrador."
-      redirect_to main_app.root_path
+    def handle_user_not_found_error(error)
+      if keycloak_config.user_not_found_path.present?
+        session[:keycloak_user_info] = error.user_info
+        redirect_to resolve_user_not_found_path
+      else
+        flash[:alert] = "Usuário não encontrado na aplicação. Contate o administrador."
+        redirect_to main_app.root_path
+      end
     end
 
     # ── Services ──────────────────────────────────────────────────────────────
@@ -244,6 +266,22 @@ module KeycloakRails
         return public_send(configured_path) if respond_to?(configured_path, true)
 
         raise ConfigurationError, "Rota configurada em permission_denied_path não existe: #{configured_path}"
+      else
+        configured_path
+      end
+    end
+
+    def resolve_user_not_found_path
+      configured_path = keycloak_config.user_not_found_path
+
+      case configured_path
+      when Proc
+        instance_exec(&configured_path)
+      when Symbol
+        return main_app.public_send(configured_path) if main_app.respond_to?(configured_path)
+        return public_send(configured_path) if respond_to?(configured_path, true)
+
+        raise ConfigurationError, "Rota configurada em user_not_found_path não existe: #{configured_path}"
       else
         configured_path
       end

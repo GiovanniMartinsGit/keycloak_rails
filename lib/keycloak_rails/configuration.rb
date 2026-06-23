@@ -8,8 +8,9 @@ module KeycloakRails
                   :token_expiration_tolerance, :logger,
                   :after_sign_in_path, :after_sign_out_path,
                   :create_user_on_first_login,
-                  :permission_denied_path,
-                  :ssl_verify, :ca_file
+                  :permission_denied_path, :user_not_found_path,
+                  :ssl_verify, :ca_file,
+                  :model_email_field, :model_name_field, :model_cpf_field
 
     attr_reader :scope
 
@@ -28,8 +29,12 @@ module KeycloakRails
       @after_sign_out_path = "/"
       @create_user_on_first_login = false
       @permission_denied_path = "/"
+      @user_not_found_path = nil
       @ssl_verify = true
       @ca_file = nil
+      @model_email_field = :email
+      @model_name_field = :nome
+      @model_cpf_field = :cpf
     end
 
     # Maps a logical session key name to the actual Rails session hash key,

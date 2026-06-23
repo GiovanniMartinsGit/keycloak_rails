@@ -6,7 +6,14 @@ module KeycloakRails
   class TokenExpiredError < AuthenticationError; end
   class TokenInvalidError < AuthenticationError; end
   class PermissionDeniedError < Error; end
-  class UserNotFoundError < Error; end
+  class UserNotFoundError < Error
+    attr_reader :user_info
+
+    def initialize(message = nil, user_info: nil)
+      @user_info = user_info
+      super(message)
+    end
+  end
   class ConfigurationError < Error; end
   class HttpError < Error
     attr_reader :status, :response_body
