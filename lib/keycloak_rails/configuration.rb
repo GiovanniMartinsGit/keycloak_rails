@@ -10,7 +10,8 @@ module KeycloakRails
                   :create_user_on_first_login,
                   :permission_denied_path, :user_not_found_path,
                   :ssl_verify, :ca_file,
-                  :model_email_field, :model_name_field, :model_cpf_field
+                  :model_email_field, :model_name_field, :model_cpf_field,
+                  :kc_idp_hint
 
     attr_reader :scope
 
@@ -35,6 +36,7 @@ module KeycloakRails
       @model_email_field = :email
       @model_name_field = :nome
       @model_cpf_field = :cpf
+      @kc_idp_hint = nil
     end
 
     # Maps a logical session key name to the actual Rails session hash key,

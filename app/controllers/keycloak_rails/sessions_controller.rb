@@ -131,13 +131,16 @@ module KeycloakRails
     # ── OAuth / OIDC helpers ──────────────────────────────────────────────────
 
     def build_authorize_url(state)
-      params = URI.encode_www_form(
+      auth_params = {
         response_type: "code",
         client_id:     keycloak_config.client_id,
         redirect_uri:  callback_url,
         scope:         "openid email profile",
         state:         state
-      )
+      }
+      auth_params[:kc_idp_hint] = keycloak_config.kc_idp_hint if keycloak_config.kc_idp_hint.present?
+
+      params = URI.encode_www_form(auth_params)
       "#{keycloak_config.auth_url}?#{params}"
     end
 
